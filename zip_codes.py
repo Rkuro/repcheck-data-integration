@@ -141,6 +141,8 @@ def download_data():
 
     output_directory = os.getcwd()
 
+    os.makedirs(os.path.join(output_directory, 'zip_codes'), exist_ok=True)
+
     with open(os.path.join(output_directory, 'zip_codes', zip_file_name), 'wb') as output_f:
         output_f.write(response.content)
 
