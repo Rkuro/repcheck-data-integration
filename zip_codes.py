@@ -7,19 +7,12 @@ import logging
 from shapely.geometry import Polygon
 from plural_openstates.config import PLURAL_API_KEY, PLURAL_HOST
 from plural_openstates.people import Reps, get_representatives_for_lat_lon
-
-"""
-Creates a mapping of zip codes to legislators. Takes a LONG time to run due to zip
-code to voting district overlaps and the plural API rate limits (10 per minute).
-
-There are 33,791 zip codes total (downloaded from the 2020 US census).
-"""
-
+import gc
 
 logging.basicConfig(
-    level=logging.INFO,  # Set the minimum logging level
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',  # Log message format
-    datefmt='%Y-%m-%d %H:%M:%S',  # Date format
+    level=logging.INFO,  
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S',
     handlers=[
         logging.StreamHandler()
     ]
@@ -33,28 +26,19 @@ def get_bounding_box_points(polygon):
     min_lat, max_lat, min_lon, max_lon = min(lats), max(lats), min(lons), max(lons)
     return [(min_lon, min_lat), (min_lon, max_lat), (max_lon, min_lat), (max_lon, max_lat)]
 
-# Function to query your representative service for a given lat/lon
+# Function to query representatives by lat/lon
 def query_representatives(lat, lon):
     return get_representatives_for_lat_lon(lat, lon)
 
-# Function to simplify polygon
+# Function to simplify polygon for large polygons
 def simplify_polygon(points, tolerance=5.0):
     polygon = Polygon(points)
     simplified_polygon = polygon.simplify(tolerance, preserve_topology=True)
     return simplified_polygon.exterior.coords
 
-
+# Retrieve representatives for lat/lon
 def get_lat_lon_reps(lat, lon):
     return set(rep["id"] for rep in query_representatives(lat, lon))
-
-
-def are_there_new_reps(centroid_reps: Reps, latlonrep: Reps):
-    return not (
-        centroid_reps.get_senators().issuperset(latlonrep.get_senators()) and
-        centroid_reps.get_reps().issuperset(latlonrep.get_reps()) and
-        centroid_reps.get_state_senators().issuperset(latlonrep.get_state_senators()) and
-        centroid_reps.get_state_reps().issuperset(latlonrep.get_state_reps())
-    )
 
 def serialize_sets(obj):
     if isinstance(obj, set):
@@ -62,85 +46,78 @@ def serialize_sets(obj):
 
     return obj
 
+# Function to process ZIP code shapefile
 def process_data(shape_file_path):
-    log.info("Processing zip codes")
-
+    log.info("Running main method")
+    
     # Open the shapefile containing the ZIP code polygons
     sf = shapefile.Reader(shape_file_path)
 
     # Loop through each ZIP code and calculate the representatives
     zip_code_representatives = {}
 
-    for record, shape in zip(sf.records(), sf.shapes()):
+    log.info("Loaded shapefile - processing zip codes")
+    
+    # Process in chunks and release memory
+    for i, (record, shape) in enumerate(zip(sf.records(), sf.shapes())):
         zcta = record[0]  # Assuming ZCTA is the first field
         zip_code_representatives[zcta] = set()
 
-        log.info(f"Processing zip code: {zcta}")
+        # Log progress periodically
+        if i % 100 == 0:
+            log.info(f"Processing zip code: {zcta} ({i}/{len(sf.records())})")
 
         # Get the centroid of the polygon
-        polygon = Polygon(shape.points)
-        centroid = polygon.centroid
-        
-        # First - get the reps for the centroid of the zip code
-        # and the bounding box coordinates. If they differ then
-        # We need to look more closely at the points as this zip
-        # code may cross district boundaries. Note that we do not
-        # want to add the corner points to the mapping as the corners
-        # may not actually be part of the zip code itself.
-        # Note lat/lon order!
+        try:
+            points = shape.points  # Get raw points from the shape
+            polygon = Polygon(points)
+            centroid = polygon.centroid
 
-        # Centroid first
-        centroid_reps = get_lat_lon_reps(centroid.y, centroid.x)
-        zip_code_representatives[zcta] = centroid_reps
+            # First - get the reps for the centroid of the ZIP code
+            centroid_reps = get_lat_lon_reps(centroid.y, centroid.x)
+            zip_code_representatives[zcta].update(centroid_reps)
 
-        # Then corner points
-        corner_points = [(y, x) for x,y in get_bounding_box_points(shape)]
-        is_cross_district_zip_code = False
-        for lat, lon in corner_points:
-            latlonreps = get_lat_lon_reps(lat, lon)
+            # Check for boundary differences
+            corner_points = [(y, x) for x,y in get_bounding_box_points(shape)]
+            is_cross_district_zip_code = False
 
-            for rep_id in latlonreps:
-                if rep_id not in centroid_reps:
-                    is_cross_district_zip_code = True
-        
-        # If bounding box points return different results, sample more points
-        if is_cross_district_zip_code:
-            log.info(f"Found cross district zip code: {zcta}")
-            # Simplify polygon and sample fewer points within to try and grab
-            # all reps that might be represented by the zip code
-            simplified_points = simplify_polygon(shape.points)
-            for lon, lat in simplified_points:
+            for lat, lon in corner_points:
                 latlonreps = get_lat_lon_reps(lat, lon)
+                if not centroid_reps.issuperset(latlonreps):
+                    is_cross_district_zip_code = True
+                    break
+            
+            # If cross-district, simplify polygon and query further
+            if is_cross_district_zip_code:
+                simplified_points = simplify_polygon(shape.points)
+                for lon, lat in simplified_points:
+                    latlonreps = get_lat_lon_reps(lat, lon)
+                    zip_code_representatives[zcta].update(latlonreps)
 
-                zip_code_representatives[zcta].update(latlonreps)
-
-        # Consolidate results into list for JSON
-        zip_code_representatives[zcta] = list(zip_code_representatives[zcta])
-
-    # Now you have a dictionary mapping ZIP codes to all unique representatives
-    for zcta, reps in zip_code_representatives.items():
-        log.info(f"ZCTA {zcta} has representatives: {reps}")
-
+        except Exception as e:
+            log.error(f"Error processing ZIP code {zcta}: {e}")
+        
+        # Save partial results and free memory after every 1000 records
+        if i % 1000 == 0:
+            with open(f"output_part_{i}.json", "w") as output_f:
+                json.dump(zip_code_representatives, output_f, default=serialize_sets)
+            zip_code_representatives.clear()  # Clear memory
+            gc.collect()  # Force garbage collection
+    
+    # Final output
     with open("output.json", "w") as output_f:
         json.dump(zip_code_representatives, output_f, default=serialize_sets)
 
-
+# Function to download shapefile if not present
 def check_data_downloaded(expected_path):
-    
-    if os.path.exists(expected_path):
-        return True
-
-    return False
-
+    return os.path.exists(expected_path)
 
 def download_data():
     zip_file_name = "tl_2020_us_zcta520.zip"
     url = f"https://www2.census.gov/geo/tiger/TIGER2020/ZCTA520/{zip_file_name}"
 
     response = requests.get(url)
-
     output_directory = os.path.join(os.getcwd(), 'zip_codes')
-
     os.makedirs(output_directory, exist_ok=True)
 
     with open(os.path.join(output_directory, zip_file_name), 'wb') as output_f:
@@ -149,11 +126,7 @@ def download_data():
     with zipfile.ZipFile(os.path.join(output_directory, zip_file_name), 'r') as zip_ref:
         zip_ref.extractall(output_directory)
 
-
-def cleanup():
-    pass
-
-
+# Main function
 def main():
     expected_path = os.path.join(os.getcwd(), 'zip_codes', 'tl_2020_us_zcta520.shp')
     if not check_data_downloaded(expected_path):
@@ -165,6 +138,6 @@ def main():
     log.info("Processing data")
     process_data(expected_path)
 
-
+# Run the main function
 if __name__ == "__main__":
     main()
