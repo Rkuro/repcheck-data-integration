@@ -43,31 +43,35 @@ def get_lat_lon_reps(lat, lon):
 def serialize_sets(obj):
     if isinstance(obj, set):
         return list(obj)
-
     return obj
 
-# Function to process ZIP code shapefile
+# Process data one shape and record at a time
 def process_data(shape_file_path):
     log.info("Running main method")
     
-    # Open the shapefile containing the ZIP code polygons
+    # Open the shapefile using iterators for memory efficiency
     sf = shapefile.Reader(shape_file_path)
+
+    # Get the number of records for progress tracking
+    num_records = len(sf)
 
     # Loop through each ZIP code and calculate the representatives
     zip_code_representatives = {}
 
     log.info("Loaded shapefile - processing zip codes")
     
-    # Process in chunks and release memory
-    for i, (record, shape) in enumerate(zip(sf.records(), sf.shapes())):
+    # Use an index-based iterator to avoid loading all shapes/records at once
+    for i in range(num_records):
+        record = sf.record(i)
+        shape = sf.shape(i)
+
         zcta = record[0]  # Assuming ZCTA is the first field
         zip_code_representatives[zcta] = set()
 
         # Log progress periodically
         if i % 100 == 0:
-            log.info(f"Processing zip code: {zcta} ({i}/{len(sf.records())})")
+            log.info(f"Processing zip code: {zcta} ({i}/{num_records})")
 
-        # Get the centroid of the polygon
         try:
             points = shape.points  # Get raw points from the shape
             polygon = Polygon(points)
