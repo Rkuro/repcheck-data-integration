@@ -139,10 +139,10 @@ def download_data():
 
     response = requests.get(url)
 
+    output_directory = os.getcwd()
+
     with open(os.path.join(output_directory, 'zip_codes', zip_file_name), 'wb') as output_f:
         output_f.write(response.content)
-    
-    output_directory = os.getcwd()
 
     with zipfile.ZipFile(os.path.join(output_directory, 'zip_codes', zip_file_name), 'r') as zip_ref:
         zip_ref.extractall(output_directory)
