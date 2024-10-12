@@ -1,0 +1,14 @@
+venv
+.vscode
+__pycache__
+app.egg-info
+*.pyc
+.mypy_cache
+.coverage
+htmlcov
+.cache
+.venv
+venv/
+*.log
+.env
+zip_codes/
