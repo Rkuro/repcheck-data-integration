@@ -69,8 +69,7 @@ def process_data(shape_file_path):
         zip_code_representatives[zcta] = set()
 
         # Log progress periodically
-        if i % 100 == 0:
-            log.info(f"Processing zip code: {zcta} ({i}/{num_records})")
+        log.info(f"Processing zip code: {zcta} ({i}/{num_records})")
 
         try:
             points = shape.points  # Get raw points from the shape
@@ -88,6 +87,7 @@ def process_data(shape_file_path):
             for lat, lon in corner_points:
                 latlonreps = get_lat_lon_reps(lat, lon)
                 if not centroid_reps.issuperset(latlonreps):
+                    log.info(f"Determined zip code {zcta} is cross district.")
                     is_cross_district_zip_code = True
                     break
             
@@ -103,7 +103,7 @@ def process_data(shape_file_path):
             log.error(traceback.format_exc())
         
         # Save partial results and free memory after every 1000 records
-        if i % 1000 == 0:
+        if i % 100 == 0:
             with open(f"output_part_{i}.json", "w") as output_f:
                 json.dump(zip_code_representatives, output_f, default=serialize_sets)
             zip_code_representatives.clear()  # Clear memory
