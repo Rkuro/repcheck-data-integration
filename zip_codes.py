@@ -5,8 +5,7 @@ import os
 import json
 import logging
 from shapely.geometry import Polygon
-from plural_openstates.config import PLURAL_API_KEY, PLURAL_HOST
-from plural_openstates.people import Reps, get_representatives_for_lat_lon
+from plural_openstates.people import get_representatives_for_lat_lon
 import gc
 
 logging.basicConfig(
