@@ -34,8 +34,8 @@ def get_representatives_for_lat_lon(lat, lon):
             # {
             #     "detail": "exceeded limit of 10/min: 11"
             # }
-            log.info("Hit API limit, waiting 60 seconds...")
-            time.sleep(60)
+            log.info("Hit API limit of 10 requests per minute, waiting 65 seconds...")
+            time.sleep(65)
         else:
             return result_json["results"]
 
