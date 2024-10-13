@@ -7,6 +7,7 @@ import logging
 from shapely.geometry import Polygon
 from plural_openstates.people import get_representatives_for_lat_lon
 import gc
+import traceback
 
 logging.basicConfig(
     level=logging.INFO,  
@@ -99,6 +100,7 @@ def process_data(shape_file_path):
 
         except Exception as e:
             log.error(f"Error processing ZIP code {zcta}: {e}")
+            log.error(traceback.format_exc())
         
         # Save partial results and free memory after every 1000 records
         if i % 1000 == 0:
