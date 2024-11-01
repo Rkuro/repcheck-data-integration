@@ -2,11 +2,43 @@ import logging
 import json
 import requests
 import time
+from urllib import parse
 
-from .config import PLURAL_API_KEY, PLURAL_HOST
+from ..config import PLURAL_API_KEY, PLURAL_HOST
 
 log = logging.getLogger(__name__)
 
+
+
+def get_person(person_id: str):
+    params = {
+        "id": parse.quote(person_id)
+    }
+    headers = {
+        "X-API-KEY": PLURAL_API_KEY
+    }
+    response = requests.get(
+        f"{PLURAL_HOST}/people",
+        headers=headers,
+        params=params
+    )
+
+    result_dict = response.json()
+
+    if "results" not in result_dict or len(result_dict["results"]) != 1:
+        raise RuntimeError(f"Unexpected person result: {json.dumps(result_dict, indent=4)}")
+
+    """
+        "results" [...],
+        "pagination": {
+            "per_page": 52,
+            "page": 1,
+            "max_page": 1,
+            "total_items": 3
+        }
+    """
+
+    return result_dict["results"][0]
 
 def send_people_geo_request(lat, lon):
     params = {
@@ -36,6 +68,8 @@ def get_representatives_for_lat_lon(lat, lon):
             # }
             log.info("Hit API limit of 10 requests per minute, waiting 65 seconds...")
             time.sleep(65)
+        elif 'results' not in result_json:
+            raise RuntimeError(f"Bad response from plural: {json.dumps(result_json, indent=4)}")
         else:
             return result_json["results"]
 

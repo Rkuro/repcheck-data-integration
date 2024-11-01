@@ -1,7 +1,8 @@
 import requests
 import json
+from urllib import parse
 
-from .config import (
+from ..config import (
     PLURAL_HOST,
     PLURAL_API_KEY
 )
@@ -19,6 +20,21 @@ def process_jurisdictions():
     while True:
         pass
     
+
+def get_jurisdiction(jurisdiction_id):
+    params = {
+        "include": ["organizations", "legislative_sessions", "latest_runs"]
+    }
+    headers = {
+        "X-API-KEY": PLURAL_API_KEY
+    }
+    response = requests.get(
+        f"{PLURAL_HOST}/jurisdictions/{jurisdiction_id}",
+        headers=headers,
+        params=params
+    )
+
+    return response.json()
 
 def get_jurisdictions(page=1):
     params = {
@@ -46,7 +62,7 @@ def get_jurisdictions(page=1):
     """
 
     return jurisdictions_page
-    
+
 
 def handle_jurisdictions_page(jurisdictions_page):
     pass
