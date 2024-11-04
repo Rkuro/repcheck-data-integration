@@ -127,7 +127,9 @@ def process_jurisdiction(session, jurisdiction_id):
     latest_run_dt = latest_run_dt.replace(tzinfo=timezone.utc)
 
     last_processed_dt = db_entry.last_processed
-    last_processed_dt = last_processed_dt.replace(tzinfo=timezone.utc)
+
+    if last_processed_dt:
+        last_processed_dt = last_processed_dt.replace(tzinfo=timezone.utc)
     log.info(f"Latest upstream run: {latest_run_dt}")
     log.info(f"Last Processed: {last_processed_dt}")
 
@@ -176,7 +178,6 @@ def main():
                 process_jurisdiction(session, jurisdiction_id)
 
                 processed_jurisdictions.add(jurisdiction_id)
-                break
             break
 
         # Commit changes
