@@ -11,5 +11,14 @@ htmlcov
 venv/
 *.log
 .env
-zip_codes/
 *.json
+
+# Needed for fips!
+!reference_data/state_fips.json
+
+# Data
+_data/
+zip_codes/
+
+.DS_Store
+.idea/
