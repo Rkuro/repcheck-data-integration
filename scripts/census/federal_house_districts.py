@@ -14,7 +14,7 @@ import shutil
 
 from scripts.census.census_utils import district_number_helper
 from scripts.database.database import upsert_dynamic, get_session
-from scripts.database.models import Jurisdiction
+from scripts.database.models import Area
 from scripts.fips_helper import get_fips_state_mapping
 from ..logging_config import setup_logging
 
@@ -77,15 +77,22 @@ def download_congressional_district_data(file_number):
             # Undefined district numbers exist for some reason...
             continue
 
-        district_number = district_number_helper(record[1])
-
+        classification = "federal_house_district"
         state_info = fips_mapping[state_fips_code]
+        district_number = district_number_helper(classification, state_info, record[1])
 
-        ocd_id = f"ocd-jurisdiction/country:us/state:{state_info.get('abbreviation').lower()}/cd:{district_number.lower()}/government"
+        if state_info["abbreviation"] in ["AK", "DE", "ND", "SD", "VT", "WY"]:
+            log.info(f"Using at-large district - {state_info['abbreviation']} -  {district_number}")
 
-        yield Jurisdiction(
+        # Cuz DC is not a state :sigh:
+        if state_info["abbreviation"] in ["DC"]:
+            ocd_id = f"ocd-division/country:us/district:{state_info.get('abbreviation').lower()}/cd:{district_number.lower()}"
+        else:
+            ocd_id = f"ocd-division/country:us/state:{state_info.get('abbreviation').lower()}/cd:{district_number.lower()}"
+
+        yield Area(
             id=ocd_id,
-            classification="federal_house_district",
+            classification=classification,
             name=f"{state_info.get('name')} {record[4]}",
             abbrev=None,
             fips_code=state_fips_code,
@@ -121,12 +128,12 @@ def main():
     total_ids = []
 
     for zip_file_number in numbers:
-        for jurisdiction in download_congressional_district_data(zip_file_number):
-            upsert_dynamic(session, jurisdiction)
-            total_ids.append(jurisdiction)
-            log.info(f"Completed jurisdiction: {jurisdiction.name}")
+        for area in download_congressional_district_data(zip_file_number):
+            upsert_dynamic(session, area)
+            total_ids.append(area)
+            log.info(f"Completed jurisdiction: {area.name}")
 
-    log.info(f"Jurisdictions downloaded {len(total_ids)}")
+    log.info(f"Areas downloaded {len(total_ids)}")
 
     cleanup()
 

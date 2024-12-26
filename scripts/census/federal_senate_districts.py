@@ -12,7 +12,7 @@ from sqlalchemy.sql import func
 import shutil
 
 from scripts.database.database import get_session, upsert_dynamic
-from scripts.database.models import Jurisdiction
+from scripts.database.models import Area
 from scripts.fips_helper import get_fips_state_mapping
 from ..logging_config import setup_logging
 
@@ -60,9 +60,9 @@ def download_state_data():
             continue
         state_info = fips_mapping[state_fips_code]
 
-        ocd_id = f"ocd-jurisdiction/country:us/state:{state_info.get('abbreviation').lower()}/government"
+        ocd_id = f"ocd-division/country:us/state:{state_info.get('abbreviation').lower()}"
 
-        yield Jurisdiction(
+        yield Area(
             id=ocd_id,
             classification="federal_senate_district",
             name=f"{state_info.get('name')}",
@@ -95,12 +95,12 @@ def main():
 
     total_ids = []
     # There is only a single state zip file
-    for jurisdiction in download_state_data():
-        upsert_dynamic(session, jurisdiction)
-        total_ids.append(jurisdiction.id)
-        log.info(f"Completed jurisdiction {jurisdiction.name}")
+    for area in download_state_data():
+        upsert_dynamic(session, area)
+        total_ids.append(area.id)
+        log.info(f"Completed area {area.name}")
 
-    log.info(f"Jurisdictions downloaded {len(total_ids)}")
+    log.info(f"Areas downloaded {len(total_ids)}")
 
     cleanup()
 

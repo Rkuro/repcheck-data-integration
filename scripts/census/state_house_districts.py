@@ -14,7 +14,7 @@ from collections import Counter
 import json
 import shutil
 
-from ..database.models import Jurisdiction
+from ..database.models import Area
 from ..database.database import get_session, upsert_dynamic
 from ..logging_config import setup_logging
 from ..fips_helper import get_fips_state_mapping
@@ -76,15 +76,15 @@ def download_state_district_data(file_number):
             log.debug("Skipping undefined district")
             continue
 
-        district_number = district_number_helper(record[1])
-
         state_info = fips_mapping[state_fips_code]
+        classification = "state_house_district"
+        district_number = district_number_helper(classification, state_info, record[1])
 
-        ocd_id = f"ocd-jurisdiction/country:us/state:{state_info.get('abbreviation').lower()}/sldl:{district_number.lower()}/government"
+        ocd_id = f"ocd-division/country:us/state:{state_info.get('abbreviation').lower()}/sldl:{district_number.lower()}"
 
-        yield Jurisdiction(
+        yield Area(
             id=ocd_id,
-            classification="state_house_district",
+            classification=classification,
             name=f"{state_info.get('name')} {record[4]}",
             abbrev=None,
             fips_code=state_fips_code,
@@ -123,15 +123,15 @@ def main():
 
     for zip_file_number in numbers:
         log.info(f"Downloading file {zip_file_number}")
-        for jurisdiction in download_state_district_data(zip_file_number):
-            upsert_dynamic(session, jurisdiction)
-            total_ids.append(jurisdiction.id)
-            log.info(f"Completed jurisdiction {jurisdiction.name}")
+        for area in download_state_district_data(zip_file_number):
+            upsert_dynamic(session, area)
+            total_ids.append(area.id)
+            log.info(f"Completed area {area.name}")
 
     counts = Counter(total_ids)
     duplicates = [item for item, count in counts.items() if count > 1]
 
-    log.info(f"Jurisdictions downloaded {len(total_ids)}. duplicate ids: {duplicates}")
+    log.info(f"Areas downloaded {len(total_ids)}. duplicate ids: {duplicates}")
 
     cleanup()
 

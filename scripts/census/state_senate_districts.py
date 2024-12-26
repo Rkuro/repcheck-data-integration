@@ -15,7 +15,7 @@ from typing import Generator
 from sqlalchemy.sql import func
 import json
 
-from ..database.models import Jurisdiction
+from ..database.models import Area
 from ..database.database import get_session, upsert_dynamic
 from ..logging_config import setup_logging
 from ..fips_helper import get_fips_state_mapping
@@ -26,7 +26,7 @@ log = logging.getLogger(__name__)
 DATA_DIR = os.path.join(os.getcwd(), '_data', "state_senate_districts")
 
 
-def download_state_district_data(file_number) -> Generator[Jurisdiction, None, None]:
+def download_state_district_data(file_number) -> Generator[Area, None, None]:
     download_base_url = "https://www2.census.gov/geo/tiger/TIGER2024/SLDU/"
 
     zip_filepath = os.path.join(DATA_DIR, f"tl_2024_{file_number}_sldu.zip")
@@ -69,22 +69,22 @@ def download_state_district_data(file_number) -> Generator[Jurisdiction, None, N
         record = sf.record(i)
         shape = sf.shape(i)
 
-        state_fips_code = record[0]
-        district_number = district_number_helper(record[1])
-
-        if district_number == "ZZZ":
+        if record[1] == "ZZZ":
             # Undefined districts make sense in the case e.g. where the entire district is a body of water
             # idk why they are in the SLDU zip files though...
             log.debug("Skipping undefined district")
             continue
 
+        classification = "state_senate_district"
+        state_fips_code = record[0]
         state_info = fips_mapping[state_fips_code]
+        district_number = district_number_helper(classification, state_info, record[1])
 
-        ocd_id = f"ocd-jurisdiction/country:us/state:{state_info.get('abbreviation').lower()}/sldu:{district_number.lower()}/government"
+        ocd_id = f"ocd-division/country:us/state:{state_info.get('abbreviation').lower()}/sldu:{district_number.lower()}"
 
-        yield Jurisdiction(
+        yield Area(
             id=ocd_id,
-            classification="state_senate_district",
+            classification=classification,
             name=f"{state_info.get('name')} {record[4]}", # "Pennsylvania Senate District 1"
             abbrev=None,
             fips_code=state_fips_code,
@@ -121,15 +121,15 @@ def main():
 
     for zip_file_number in numbers:
         log.info(f"Downloading file {zip_file_number}")
-        for jurisdiction in download_state_district_data(zip_file_number):
-            upsert_dynamic(session, jurisdiction)
-            total_ids.append(jurisdiction.id)
-            log.info(f"Completed jurisdiction {jurisdiction.name}")
+        for area in download_state_district_data(zip_file_number):
+            upsert_dynamic(session, area)
+            total_ids.append(area.id)
+            log.info(f"Completed area {area.name}")
 
     counts = Counter(total_ids)
     duplicates = [item for item, count in counts.items() if count > 1]
 
-    log.info(f"Jurisdictions downloaded {len(total_ids)}. duplicate ids: {duplicates}")
+    log.info(f"Areas downloaded {len(total_ids)}. duplicate ids: {duplicates}")
 
     cleanup()
 
