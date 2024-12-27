@@ -108,6 +108,7 @@ def find_current_role(person_data):
         if "end_date" in role:
             end_date = role["end_date"]
 
+            log.info(f"start {type(start_date)} end {type(end_date)}")
             if start_date <= datetime.now(timezone.utc).date() <= end_date:
                 return role
         else:
