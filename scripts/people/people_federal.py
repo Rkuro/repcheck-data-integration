@@ -103,12 +103,15 @@ def find_current_role(person_data):
             raise RuntimeError(f"Unexpected role structure: {role}")
 
         start_date = role["start_date"]
+        if isinstance(start_date, str):
+            start_date = datetime.strptime(start_date, "%Y-%m-%d")
 
         # Sometimes there's not an end date included yet (for newly elected folks)
         if "end_date" in role:
             end_date = role["end_date"]
+            if isinstance(end_date, str):
+                end_date = datetime.strptime(end_date, "%Y-%m-%d")
 
-            log.info(f"start {type(start_date)} end {type(end_date)}")
             if start_date <= datetime.now(timezone.utc).date() <= end_date:
                 return role
         else:
