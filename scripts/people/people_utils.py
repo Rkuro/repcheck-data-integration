@@ -1,4 +1,7 @@
+from git import Repo, GitCommandError
+import logging
 
+log = logging.getLogger(__name__)
 
 
 def clone_repository(repo_url, clone_dir):

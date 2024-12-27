@@ -10,7 +10,6 @@ from datetime import datetime, timezone
 
 from scripts.database.database import upsert_dynamic, get_session
 from ..database.models import Person
-from git import Repo, GitCommandError
 import os
 import shutil
 import logging
