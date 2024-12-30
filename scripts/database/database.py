@@ -42,7 +42,7 @@ def get_session():
     session = Session(engine)
     return session
 
-
+# Upsert any data into the DB - overwrites all fields if data exists already
 def upsert_dynamic(session, data):
     # Get the model class from the instance
     model = type(data)

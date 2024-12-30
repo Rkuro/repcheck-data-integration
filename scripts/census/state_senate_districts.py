@@ -80,7 +80,10 @@ def download_state_district_data(file_number) -> Generator[Area, None, None]:
         state_info = fips_mapping[state_fips_code]
         district_number = district_number_helper(classification, state_info, record[1])
 
-        ocd_id = f"ocd-division/country:us/state:{state_info.get('abbreviation').lower()}/sldu:{district_number.lower()}"
+        if state_info["abbreviation"] == "DC":
+            ocd_id = f"ocd-division/country:us/district:dc/ward:{district_number}"
+        else:
+            ocd_id = f"ocd-division/country:us/state:{state_info.get('abbreviation').lower()}/sldu:{district_number.lower()}"
 
         yield Area(
             id=ocd_id,

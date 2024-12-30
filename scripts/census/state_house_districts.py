@@ -27,6 +27,7 @@ DATA_DIR = os.path.join(os.getcwd(), '_data', "state_house_districts")
 
 def download_state_district_data(file_number):
     download_base_url = "https://www2.census.gov/geo/tiger/TIGER2024/SLDL/"
+    state_district_url = "https://www2.census.gov/geo/tiger/GENZ2023/shp/cb_2023_us_sldl_500k.zip"
 
     zip_filepath = os.path.join(DATA_DIR, f"tl_2024_{file_number}_sldl.zip")
 

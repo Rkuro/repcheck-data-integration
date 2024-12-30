@@ -60,7 +60,10 @@ def download_state_data():
             continue
         state_info = fips_mapping[state_fips_code]
 
-        ocd_id = f"ocd-division/country:us/state:{state_info.get('abbreviation').lower()}"
+        if state_info["abbreviation"] == "DC":
+            ocd_id = f"ocd-division/country:us/district:dc"
+        else:
+            ocd_id = f"ocd-division/country:us/state:{state_info.get('abbreviation').lower()}"
 
         yield Area(
             id=ocd_id,

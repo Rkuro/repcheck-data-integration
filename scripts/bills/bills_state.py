@@ -10,22 +10,25 @@ from ..database.models import Bill, VoteEvent
 from ..logging_config import setup_logging
 from ..utils import convert_area_id
 
-
 log = logging.getLogger(__name__)
+
 
 def get_files_by_prefix(prefix: str, directory: str):
     return [os.path.join(directory, x) for x in os.listdir(directory) if x.startswith(prefix)]
+
 
 def create_vote_event_id(vote_event_identifier):
     uuid_value = uuid5(NAMESPACE_OID, vote_event_identifier)
     return f"ocd-vote-event/{uuid_value}"
 
+
 def create_bill_id(canonical_id, jurisdiction_area_id):
-    uuid_value=uuid5(
+    uuid_value = uuid5(
         NAMESPACE_OID,
         "_".join([canonical_id, jurisdiction_area_id])
     )
     return f"ocd-bill/{uuid_value}"
+
 
 def main():
     log.info("Ingesting bills ")
@@ -47,7 +50,7 @@ def main():
     1. Jurisdiction.json file - information about the jurisdiction relevant for the bills
     2. Bill.json files - information about each bill
     4. VoteEvent.json files - information about votes related to bills
-    
+
     There are also organization.json files and event.json files that we are not ingesting 
     at this time.
     """
@@ -103,14 +106,15 @@ def main():
     # Ingest votes
     vote_event_files = get_files_by_prefix("vote_event", bill_data_directory_path)
     for vote_event_filepath in vote_event_files:
+        log.info(f"Handling vote file: {vote_event_filepath}")
         with open(vote_event_filepath) as vote_event_file:
             vote_event_data = json.load(vote_event_file)
 
-            vote_bill_data = json.loads(vote_event_data["bill"][1:])
-            if vote_bill_data["identifier"] in bill_ids:
+            vote_bill_data_identifier = vote_event_data["bill_identifier"]
+            if vote_bill_data_identifier in bill_ids:
                 vote_event = VoteEvent(
                     id=create_vote_event_id(vote_event_data["identifier"]),
-                    bill_id=create_bill_id(vote_bill_data["identifier"], jurisdiction_area_id),
+                    bill_id=create_bill_id(vote_bill_data_identifier, jurisdiction_area_id),
                     identifier=vote_event_data["identifier"],
                     motion_text=vote_event_data["motion_text"],
                     motion_classification=vote_event_data["motion_classification"],
@@ -126,9 +130,10 @@ def main():
                 )
 
                 upsert_dynamic(session, vote_event)
-                log.info(f"Upserted vote: {vote_event.id} for bill {vote_bill_data['identifier']}")
+                log.info(f"Upserted vote: {vote_event.id} for bill {vote_bill_data_identifier}")
             else:
-                log.warning(f"No bill found for vote event {vote_event_filepath} not found - Bill ID: {vote_bill_data['identifier']}")
+                log.warning(
+                    f"No bill found for vote event {vote_event_filepath} not found - Bill ID: {vote_bill_data_identifier}")
 
 
 if __name__ == "__main__":

@@ -4,18 +4,15 @@ This script is intended to pull and ingest the U.S. congressional legislators
 """
 
 import yaml
-from typing import Tuple
-import json
-from datetime import datetime, timezone
-
-from scripts.database.database import upsert_dynamic, get_session
-from ..database.models import Person
 import os
 import shutil
 import logging
+
+from ..database.database import upsert_dynamic, get_session
+from ..database.models import Person
 from ..logging_config import setup_logging
 from ..fips_helper import get_fips_state_mapping
-from .people_utils import clone_repository
+from .people_utils import clone_repository, find_current_role
 
 log = logging.getLogger(__name__)
 
@@ -83,43 +80,6 @@ def map_role_type(role_type):
         "upper": "Senate",
         "lower": "House"
     }[role_type]
-
-
-def find_current_role(person_data):
-    """
-    [ {
-          "start_date" : "2023-01-03",
-          "end_date" : "2025-01-03",
-          "type" : "lower",
-          "jurisdiction" : "ocd-jurisdiction/country:us/government",
-          "district" : "TX-13"
-        }, ...
-    ]
-    """
-    roles = person_data["roles"]
-    required_keys = ["start_date", "type", "jurisdiction", "district"]
-    for role in roles:
-        if not all([key in role for key in required_keys]):
-            raise RuntimeError(f"Unexpected role structure: {role}")
-
-        start_date = role["start_date"]
-        if isinstance(start_date, str):
-            start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
-
-        # Sometimes there's not an end date included yet (for newly elected folks)
-        if "end_date" in role:
-            end_date = role["end_date"]
-            if isinstance(end_date, str):
-                end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
-
-            if start_date <= datetime.now(timezone.utc).date() <= end_date:
-                return role
-        else:
-            if start_date < datetime.now(timezone.utc).date():
-                return role
-
-    log.warning(f"Unable to find current role for person: {person_data}")
-    raise RuntimeError(f"Unable to find current role for person: {person_data}")
 
 
 def parse_people_data(repo_dir):

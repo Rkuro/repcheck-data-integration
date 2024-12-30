@@ -87,10 +87,12 @@ def connect_zip_codes(session):
     # around them, we need to create some edges between them and other data:
     # Zip code -> Person (based on representative district area not jurisdiction)
     log.info("Connecting zip codes")
-    people = session.exec(select(Person)).scalars().all()
+    people = session.exec(select(Person.id, Person.name, Person.constituent_area_id)).all()
 
-    for person in people:
-        log.info(f"Connecting person {person.name} to zip codes")
+    num_people = len(people)
+
+    for i, person in enumerate(people):
+        log.info(f"Connecting person {person.name} to zip codes. {i}/{num_people}")
         constituent_area = session.exec(
             select(Area).where(Area.id == person.constituent_area_id)
         ).scalars().one_or_none()
@@ -111,7 +113,8 @@ def connect_zip_codes(session):
                 area_id=zip_area.id,
                 relationship_type="constituent_area_zip_code"
             )
-            session.add(association)
+            # Write to db
+            upsert_dynamic(session, association)
 
     session.commit()
     session.close()
@@ -126,8 +129,8 @@ def main():
     session = get_session()
     os.makedirs(DATA_DIR, exist_ok=True)
 
-    for area in download_zip_codes():
-        upsert_dynamic(session, area)
+    # for area in download_zip_codes():
+    #     upsert_dynamic(session, area)
 
     # cleanup()
 
