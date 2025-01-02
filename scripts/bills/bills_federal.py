@@ -2,16 +2,20 @@ import os
 import logging
 import argparse
 import json
-from datetime import datetime
+import re
+from datetime import datetime, timezone
 from uuid import uuid5, NAMESPACE_OID
+from sqlmodel import select
 
-from scripts.database.database import upsert_dynamic, get_session
-from ..database.models import Bill, VoteEvent
+from .vote_matching import replace_voter_ids, augment_persons_with_state, get_vote_chamber
+from ..database.database import upsert_dynamic, get_session
+from ..database.models import Bill, VoteEvent, Person
 from ..logging_config import setup_logging
 from ..utils import convert_area_id
 
 
 log = logging.getLogger(__name__)
+
 
 def get_files_by_prefix(prefix: str, directory: str):
     return [os.path.join(directory, x) for x in os.listdir(directory) if x.startswith(prefix)]
@@ -26,6 +30,46 @@ def create_bill_id(canonical_id, jurisdiction_area_id):
         "_".join([canonical_id, jurisdiction_area_id])
     )
     return f"ocd-bill/{uuid_value}"
+
+
+def find_person_match_by_name(people_data, vote):
+    # Several different formats for Federal folks
+    # 'Baldwin (D-WI)'
+    # 'Kamlager-Dove'
+    vote_name_match = re.match(r"(.+) \(.?-?([A-Z]{2})\)", vote["voter_name"])
+
+    if not vote_name_match:
+        log.warning(f"Unexpected voter name: {vote['voter_name']}")
+
+    for person in people_data:
+        if vote_name_match:
+            last_name = vote_name_match.group(1)
+            vote_state = vote_name_match.group(2)
+            if vote_state.lower() in person.constituent_area_id and person.last_name == last_name:
+                return person
+        else:
+            if vote["voter_name"].lower() == person.last_name.lower():
+                return person
+
+
+def match_people_ids(people_data, vote_event):
+    """
+    "votes": [
+    {
+      "option": "yes",
+      "voter_name": "Camera Bartolotta",
+      "voter_id": "~{\"name\": \"Camera Bartolotta\"}",
+      "note": ""
+    },
+    """
+    for vote in vote_event["votes"]:
+        person = find_person_match_by_name(people_data, vote)
+        if person:
+            vote["voter_id"] = person.id
+        else:
+            log.warning(f"Could not find person for vote event {vote}")
+    return vote_event
+
 
 def main():
     log.info("Ingesting bills ")
@@ -74,11 +118,15 @@ def main():
                 log.info(f"Subject: {bill_data['subject']}")
                 raise RuntimeError(json.dumps(bill_data, indent=2))
 
+            latest_action = max(bill_data["actions"], key=lambda x: x["date"])
+            first_action = min(bill_data["actions"], key=lambda x: x["date"])
+
             bill = Bill(
                 id=create_bill_id(bill_data["identifier"], jurisdiction_area_id),
                 title=bill_data["title"],
                 canonical_id=bill_data["identifier"],
                 jurisdiction_area_id=jurisdiction_area_id,
+                jurisdiction_level="federal",
                 legislative_session=bill_data["legislative_session"],
                 from_organization=json.loads(bill_data["from_organization"][1:]),
                 classification=bill_data["classification"],
@@ -93,12 +141,32 @@ def main():
                 documents=bill_data["documents"],
                 citations=bill_data["citations"],
                 sources=bill_data["sources"],
-                extras=bill_data["extras"]
+                extras=bill_data["extras"],
+                latest_action_date=datetime.strptime(latest_action["date"], "%Y-%m-%dT%H:%M:%S%z"),
+                first_action_date=datetime.strptime(first_action["date"], "%Y-%m-%dT%H:%M:%S%z"),
+                updated_at=datetime.now(timezone.utc)
             )
 
             upsert_dynamic(session, bill)
 
             bill_ids.append(bill_data["identifier"])
+
+    # Need to find the person ids for each vote which unfortunately is by name
+    # Keeping just the name info to reduce memory pressure here but we'll need to
+    # hold all of it
+    people_data = session.exec(
+        select(
+            Person.id,
+            Person.name,
+            Person.first_name,
+            Person.last_name,
+            Person.constituent_area_id,
+            Person.chamber
+        ).where(
+            Person.jurisdiction_area_id==jurisdiction_area_id
+        )
+    ).all()
+    people_data = augment_persons_with_state(people_data)
 
     # Ingest votes
     vote_event_files = get_files_by_prefix("vote_event", bill_data_directory_path)
@@ -108,6 +176,11 @@ def main():
 
             vote_bill_data = json.loads(vote_event_data["bill"][1:])
             if vote_bill_data["identifier"] in bill_ids:
+                vote_event_data['votes'] = replace_voter_ids(
+                    vote_event_data['votes'],
+                    people_data,
+                    get_vote_chamber(vote_event_data)
+                )
                 vote_event = VoteEvent(
                     id=create_vote_event_id(vote_event_data["identifier"]),
                     bill_id=create_bill_id(vote_bill_data["identifier"], jurisdiction_area_id),
@@ -126,9 +199,9 @@ def main():
                 )
 
                 upsert_dynamic(session, vote_event)
-                log.info(f"Upserted vote: {vote_event.id} for bill {vote_bill_data['identifier']}")
+                log.info(f"Upserted vote: {vote_event_filepath} for bill {vote_bill_data['identifier']}")
             else:
-                log.warning(f"No bill found for vote event {vote_event_filepath} not found - Bill ID: {vote_bill_data['identifier']}")
+                log.warning(f"No bill found for vote event {vote_event_filepath} - Bill ID: {vote_bill_data['identifier']}")
 
 
 if __name__ == "__main__":

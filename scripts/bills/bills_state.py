@@ -2,13 +2,15 @@ import os
 import logging
 import argparse
 import json
-from datetime import datetime
+from sqlmodel import select
+from datetime import datetime, timezone
 from uuid import uuid5, NAMESPACE_OID
 
-from scripts.database.database import upsert_dynamic, get_session
-from ..database.models import Bill, VoteEvent
+from ..database.database import upsert_dynamic, get_session
+from ..database.models import Bill, VoteEvent, Person
 from ..logging_config import setup_logging
 from ..utils import convert_area_id
+from .vote_matching import augment_persons_with_state, replace_voter_ids, get_vote_chamber
 
 log = logging.getLogger(__name__)
 
@@ -77,11 +79,15 @@ def main():
                 log.info(f"Subject: {bill_data['subject']}")
                 raise RuntimeError(json.dumps(bill_data, indent=2))
 
+            latest_action = max(bill_data["actions"], key=lambda x: x["date"])
+            first_action = min(bill_data["actions"], key=lambda x: x["date"])
+
             bill = Bill(
                 id=create_bill_id(bill_data["identifier"], jurisdiction_area_id),
                 title=bill_data["title"],
                 canonical_id=bill_data["identifier"],
                 jurisdiction_area_id=jurisdiction_area_id,
+                jurisdiction_level="state",
                 legislative_session=bill_data["legislative_session"],
                 from_organization=json.loads(bill_data["from_organization"][1:]),
                 classification=bill_data["classification"],
@@ -96,12 +102,32 @@ def main():
                 documents=bill_data["documents"],
                 citations=bill_data["citations"],
                 sources=bill_data["sources"],
-                extras=bill_data["extras"]
+                extras=bill_data["extras"],
+                latest_action_date=datetime.strptime(latest_action["date"], "%Y-%m-%dT%H:%M:%S%z"),
+                first_action_date=datetime.strptime(first_action["date"], "%Y-%m-%dT%H:%M:%S%z"),
+                updated_at=datetime.now(timezone.utc)
             )
 
             upsert_dynamic(session, bill)
 
             bill_ids.append(bill_data["identifier"])
+
+    # Need to find the person ids for each vote which unfortunately is by name
+    # Keeping just the name info to reduce memory pressure here but we'll need to
+    # hold all of it
+    people_data = session.exec(
+        select(
+            Person.id,
+            Person.name,
+            Person.first_name,
+            Person.last_name,
+            Person.constituent_area_id,
+            Person.chamber
+        ).where(
+            Person.jurisdiction_area_id == jurisdiction_area_id
+        )
+    ).all()
+    people_data = augment_persons_with_state(people_data)
 
     # Ingest votes
     vote_event_files = get_files_by_prefix("vote_event", bill_data_directory_path)
@@ -112,9 +138,14 @@ def main():
 
             vote_bill_data_identifier = vote_event_data["bill_identifier"]
             if vote_bill_data_identifier in bill_ids:
+                vote_event_data['votes'] = replace_voter_ids(
+                    vote_event_data['votes'],
+                    people_data,
+                    get_vote_chamber(vote_event_data))
+                bill_id = create_bill_id(vote_bill_data_identifier, jurisdiction_area_id)
                 vote_event = VoteEvent(
                     id=create_vote_event_id(vote_event_data["identifier"]),
-                    bill_id=create_bill_id(vote_bill_data_identifier, jurisdiction_area_id),
+                    bill_id=bill_id,
                     identifier=vote_event_data["identifier"],
                     motion_text=vote_event_data["motion_text"],
                     motion_classification=vote_event_data["motion_classification"],
@@ -130,10 +161,10 @@ def main():
                 )
 
                 upsert_dynamic(session, vote_event)
-                log.info(f"Upserted vote: {vote_event.id} for bill {vote_bill_data_identifier}")
+                log.info(f"Upserted vote: {vote_event_filepath} for bill {bill_id}")
             else:
                 log.warning(
-                    f"No bill found for vote event {vote_event_filepath} not found - Bill ID: {vote_bill_data_identifier}")
+                    f"No bill found for vote event {vote_event_filepath} - Bill ID: {vote_bill_data_identifier}")
 
 
 if __name__ == "__main__":

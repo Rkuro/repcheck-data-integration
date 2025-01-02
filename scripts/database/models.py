@@ -1,7 +1,7 @@
 from sqlmodel import SQLModel, Field, Relationship
 from geoalchemy2 import Geometry
-from datetime import datetime
-from sqlalchemy import Column, ARRAY, Text, JSON, BigInteger, DOUBLE_PRECISION
+from datetime import datetime, timezone
+from sqlalchemy import Column, ARRAY, Text, JSON, BigInteger, DOUBLE_PRECISION, DateTime, text
 from typing import List, Optional, Dict
 
 class PersonArea(SQLModel, table=True):
@@ -79,6 +79,13 @@ class Bill(SQLModel, table=True):
     citations: List[Dict] = Field(default=None, sa_column=Column(JSON))
     sources: List[Dict] = Field(default=None, sa_column=Column(JSON))
     extras: Dict = Field(default=None, sa_column=Column(JSON))
+
+    # Derived fields
+    latest_action_date: Optional[datetime] = Field(default=None, sa_column=Column(DateTime))
+    first_action_date: Optional[datetime] = Field(default=None, sa_column=Column(DateTime))
+    updated_at: datetime = Field(default=None, sa_column=Column(DateTime))
+    created_at: datetime = Field(sa_column_kwargs={"server_default": text("CURRENT_TIMESTAMP")})
+    jurisdiction_level: str
 
 
 class VoteEvent(SQLModel, table=True):

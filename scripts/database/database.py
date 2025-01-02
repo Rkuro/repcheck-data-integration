@@ -48,7 +48,7 @@ def upsert_dynamic(session, data):
     model = type(data)
 
     # Convert instance to dictionary, excluding unset values
-    data = data.dict(exclude_unset=True)
+    data = data.dict(exclude_unset=True, exclude={"created_at"})
     mapper = inspect(model)
     primary_keys = [key.name for key in mapper.primary_key]
 
@@ -57,7 +57,7 @@ def upsert_dynamic(session, data):
 
     # Automatically exclude primary keys from the `SET` clause
     update_fields = {col.name: getattr(stmt.excluded, col.name)
-                     for col in mapper.columns if col.name not in primary_keys}
+                     for col in mapper.columns if col.name not in primary_keys and col.name != "created_at"}
 
     stmt = stmt.on_conflict_do_update(
         index_elements=primary_keys,
