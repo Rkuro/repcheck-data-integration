@@ -19,6 +19,7 @@ python-dateutil==2.9.0.post0
 python-dotenv==1.0.1
 pytz==2024.2
 PyYAML==6.0.2
+RapidFuzz==3.11.0
 requests==2.32.3
 shapely==2.0.6
 six==1.16.0
@@ -26,6 +27,7 @@ smmap==5.0.1
 soupsieve==2.6
 SQLAlchemy==2.0.36
 sqlmodel==0.0.22
+thefuzz==0.22.1
 typing_extensions==4.12.2
 tzdata==2024.2
 urllib3==2.2.3
