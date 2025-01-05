@@ -17,7 +17,7 @@ import shutil
 from ..database.models import Area
 from ..database.database import get_session, upsert_dynamic
 from ..logging_config import setup_logging
-from ..fips_helper import get_fips_state_mapping
+from ..reference_data_helper import get_fips_state_mapping
 from .census_utils import district_number_helper
 
 log = logging.getLogger(__name__)

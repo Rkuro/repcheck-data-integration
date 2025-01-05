@@ -114,7 +114,7 @@ def main():
 
     # Need to find the person ids for each vote which unfortunately is by name
     # Keeping just the name info to reduce memory pressure here but we'll need to
-    # hold all of it
+    # hold all of it. At least we can filter by jurisdiction area.
     people_data = session.exec(
         select(
             Person.id,

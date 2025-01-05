@@ -6,18 +6,21 @@ This script is intended to pull and ingest the state house and senate legislator
 import yaml
 import logging
 import os
+import shutil
 
 from .people_utils import clone_repository, find_current_role
 from ..database.database import get_session, upsert_dynamic
 from ..database.models import Person
 from ..logging_config import setup_logging
 from ..utils import convert_area_id
+from ..reference_data_helper import get_state_district_mapping
 
 log = logging.getLogger(__name__)
 
 REPO_URL = "https://github.com/openstates/people"
 REPO_DIR = os.path.join(os.getcwd(), "_data", "people")
 
+district_mapping = get_state_district_mapping()
 
 # Definitely some stuff that we can't process yet, but very interesting nonetheless
 def is_special_case(state_abbrev, person_data, current_role):
@@ -54,6 +57,21 @@ def find_current_constituent_area_id(state_abbrev, current_role):
      "district" : "10"
     }
     """
+
+    if state_abbrev == "ma":
+
+        state_district_mapping = district_mapping[state_abbrev]
+        # Mass has human-named districts versus numbers so we need a mapping to find the ID
+        chamber = current_role["type"]
+
+        if current_role['district'] in state_district_mapping[chamber]:
+            return state_district_mapping[chamber][current_role['district']]
+        elif current_role['district'] in state_district_mapping["special"]:
+            return state_district_mapping["special"][current_role['district']]
+        else:
+            log.warning(f"District {current_role['district']} not found!")
+            raise RuntimeError(f"Missing Massachusetts district! current_role: {current_role}")
+
 
     # DC is a bit weird
     if state_abbrev == "dc":
@@ -101,7 +119,7 @@ def parse_people_data(repo_dir):
         PR - Need area mappings for Puerto Rico
         ND - North dakota house district mappings are out of date from the census tiger shapefiles - they were updated in 2023 versus the census in 2020. Some interesting options here, but for now going to skip ND
         """
-        if state_abbreviation in ["vt", "ma", "nh", "pr", "nd"]:
+        if state_abbreviation in ["vt", "nh", "pr", "nd"]:
             continue
 
         # US - Handled in the federal people script - this script is for states
@@ -147,9 +165,8 @@ def parse_people_data(repo_dir):
                 )
 
 
-
 def cleanup(repo_dir):
-    pass
+    shutil.rmtree(repo_dir)
 
 
 def main():
@@ -157,6 +174,9 @@ def main():
     # Setup
     session = get_session()
     os.makedirs(REPO_DIR, exist_ok=True)
+
+    # Make sure we're pulling fresh data
+    cleanup(REPO_DIR)
 
     # Data lives in a GH repository
     clone_repository(REPO_URL, REPO_DIR)

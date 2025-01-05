@@ -11,7 +11,7 @@ import logging
 from ..database.database import upsert_dynamic, get_session
 from ..database.models import Person
 from ..logging_config import setup_logging
-from ..fips_helper import get_fips_state_mapping
+from ..reference_data_helper import get_fips_state_mapping
 from .people_utils import clone_repository, find_current_role
 
 log = logging.getLogger(__name__)
@@ -131,6 +131,9 @@ def main():
     # Setup
     session = get_session()
     os.makedirs(REPO_DIR, exist_ok=True)
+
+    # Make sure we're pulling fresh data
+    cleanup(REPO_DIR)
 
     # Data lives in a GH repository
     clone_repository(REPO_URL, REPO_DIR)

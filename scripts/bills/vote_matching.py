@@ -119,9 +119,18 @@ def _fuzzy_match_name(standardized_name: str, persons: list, threshold: int) -> 
 
     standardized_lower = standardized_name.lower()
 
-    # 1) Check for exact last name match (case-insensitive).
+    # Check for exact name match first (case insensitive)
+
+    # 1) Check for exact name match (case-insensitive).
     #    If found, immediately return that person's ID.
     for p in persons:
+        # If we find exact name match - just return
+        if "name" in p and p["name"] and p["name"].lower() == standardized_lower:
+            log.info(f"Matched {standardized_name} to {p['name']}")
+            return p['id']
+
+        # This is a little spooky - for Federal votes, they often only include the last name
+        # but it's kinda questionable for me to do this...
         if "last_name" in p and p["last_name"] and p["last_name"].lower() == standardized_lower:
             log.info(f"Matched {standardized_name} to {p['last_name']}")
             return p["id"]
@@ -139,12 +148,6 @@ def _fuzzy_match_name(standardized_name: str, persons: list, threshold: int) -> 
             composite = f"{first} {last}".strip()
             if composite:  # e.g. "Case" "Smith"
                 name_map[composite] = pid
-
-        # b) Optionally last_name + first_name if relevant in your data
-        #    comment out if you don’t use this pattern
-        # alt_composite = f"{last} {first}".strip()
-        # if alt_composite:
-        #     name_map[alt_composite] = pid
 
         # c) If you still want to consider p["name"] as is
         if p.get("name"):
@@ -194,7 +197,8 @@ def match_voter_to_person(
     if voter_state:
         persons = filter(lambda p: p["state"] == voter_state, persons)
 
-    if vote_chamber:
+    # Some states use different mappings like "legislature" -> "City Council" which can be difficult
+    if vote_chamber in ["lower", "upper"]:
         person_chamber = {
             "lower": "House",
             "upper": "Senate"
@@ -208,7 +212,7 @@ def match_voter_to_person(
     return _fuzzy_match_name(standardized_voter, persons, threshold)
 
 
-def replace_voter_ids(votes: list, persons: list, vote_chamber: str, threshold: int = 90) -> list:
+def replace_voter_ids(votes: list, persons: list, vote_chamber: str, threshold: int = 80) -> list:
     """
     For each vote in votes, parse out the state from vote['jurisdiction_id'],
     then fuzzy match voter_name to Person data restricted by that state.
@@ -246,7 +250,7 @@ def replace_voter_ids(votes: list, persons: list, vote_chamber: str, threshold: 
     for vote in votes:
         voter_name = vote.get('voter_name', '')
 
-        # Extract the state code from the vote
+        # Try to extract the state code from the vote
         voter_state = get_state_from_name(voter_name)
 
         matched_id = match_voter_to_person(
@@ -307,7 +311,7 @@ def main():
     ]
 
     # Replace voter_ids using fuzzy matching + state filtering
-    updated_votes = replace_voter_ids(votes, persons, threshold=80)
+    updated_votes = replace_voter_ids(votes, persons, vote_chamber="upper", voter_state=None, threshold=80)
 
     # Print out the updated votes
     print("=== Updated Votes ===")

@@ -77,7 +77,7 @@ def find_current_role(person_data):
         potential_role = role
 
     if potential_role:
-        log.warning(f"Using best guess for current role {potential_role}")
+        # log.warning(f"Using best guess for current role {potential_role}")
         return potential_role
 
     log.warning(f"Unable to find current role for person: {person_data}")

@@ -13,7 +13,7 @@ import shutil
 
 from scripts.database.database import get_session, upsert_dynamic
 from scripts.database.models import Area
-from scripts.fips_helper import get_fips_state_mapping
+from scripts.reference_data_helper import get_fips_state_mapping
 from ..logging_config import setup_logging
 
 log = logging.getLogger(__name__)
