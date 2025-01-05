@@ -33,6 +33,9 @@ def create_bill_id(canonical_id, jurisdiction_area_id):
 
 
 def parse_date_str(date_str):
+    if not date_str:
+        return None
+
     formats = [
         "%Y-%m-%dT%H:%M:%S%z",
         "%Y-%m-%d"
