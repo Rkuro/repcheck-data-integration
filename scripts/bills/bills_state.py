@@ -125,8 +125,8 @@ def main():
                 citations=bill_data["citations"],
                 sources=bill_data["sources"],
                 extras=bill_data["extras"],
-                latest_action_date=parse_date_str(latest_action["date"]),
-                first_action_date=parse_date_str(first_action["date"]),
+                latest_action_date=parse_date_str(latest_action["date"] if latest_action else None),
+                first_action_date=parse_date_str(first_action["date"] if first_action else None),
                 updated_at=datetime.now(timezone.utc)
             )
 
