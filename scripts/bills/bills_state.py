@@ -32,6 +32,21 @@ def create_bill_id(canonical_id, jurisdiction_area_id):
     return f"ocd-bill/{uuid_value}"
 
 
+def parse_date_str(date_str):
+    formats = [
+        "%Y-%m-%dT%H:%M:%S%z",
+        "%Y-%m-%d"
+    ]
+
+    for format in formats:
+        try:
+            attempt = datetime.strptime(date_str, format)
+            return attempt
+        except ValueError:
+            continue
+
+    raise RuntimeError(f"Could not parse date '{date_str}'")
+
 def main():
     log.info("Ingesting bills ")
 
@@ -103,8 +118,8 @@ def main():
                 citations=bill_data["citations"],
                 sources=bill_data["sources"],
                 extras=bill_data["extras"],
-                latest_action_date=datetime.strptime(latest_action["date"], "%Y-%m-%dT%H:%M:%S%z"),
-                first_action_date=datetime.strptime(first_action["date"], "%Y-%m-%dT%H:%M:%S%z"),
+                latest_action_date=parse_date_str(latest_action["date"]),
+                first_action_date=parse_date_str(first_action["date"]),
                 updated_at=datetime.now(timezone.utc)
             )
 
