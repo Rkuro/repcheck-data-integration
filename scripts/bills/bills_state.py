@@ -94,8 +94,12 @@ def main():
                 log.info(f"Subject: {bill_data['subject']}")
                 raise RuntimeError(json.dumps(bill_data, indent=2))
 
-            latest_action = max(bill_data["actions"], key=lambda x: x["date"])
-            first_action = min(bill_data["actions"], key=lambda x: x["date"])
+            if bill_data["actions"] and len(bill_data["actions"]) > 0:
+                latest_action = max(bill_data["actions"], key=lambda x: x["date"])
+                first_action = min(bill_data["actions"], key=lambda x: x["date"])
+            else:
+                latest_action = None
+                first_action = None
 
             bill = Bill(
                 id=create_bill_id(bill_data["identifier"], jurisdiction_area_id),
