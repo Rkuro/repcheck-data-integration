@@ -14,7 +14,7 @@ venv/
 *.json
 
 # Needed for fips!
-!reference_data/state_fips.json
+!reference_data/*json
 
 # Data
 _data/
