@@ -6,6 +6,7 @@ import re
 from datetime import datetime, timezone
 from uuid import uuid5, NAMESPACE_OID
 from sqlmodel import select
+from collections import defaultdict
 
 from .vote_matching import replace_voter_ids, augment_persons_with_state, get_vote_chamber
 from ..database.database import upsert_dynamic, get_session
@@ -17,6 +18,9 @@ from ..utils import convert_area_id
 log = logging.getLogger(__name__)
 
 
+def remove_non_numeric_chars(string):
+    return ''.join(filter(str.isnumeric, string))
+
 def get_files_by_prefix(prefix: str, directory: str):
     return [os.path.join(directory, x) for x in os.listdir(directory) if x.startswith(prefix)]
 
@@ -24,7 +28,7 @@ def create_vote_event_id(vote_event_identifier):
     uuid_value = uuid5(NAMESPACE_OID, vote_event_identifier)
     return f"ocd-vote-event/{uuid_value}"
 
-def create_bill_id(canonical_id, jurisdiction_area_id):
+def create_bill_id(canonical_id, legislative_session, jurisdiction_area_id):
     uuid_value=uuid5(
         NAMESPACE_OID,
         "_".join([canonical_id, jurisdiction_area_id])
@@ -107,7 +111,9 @@ def main():
 
     bill_files = get_files_by_prefix("bill", bill_data_directory_path)
 
-    bill_ids = []
+    # Need to match by bill ID and legislative session
+    bill_vote_mapping = defaultdict(set)
+
     # Ingest bills
     for bill_filepath in bill_files:
         with open(bill_filepath) as bill_file:
@@ -121,8 +127,10 @@ def main():
             latest_action = max(bill_data["actions"], key=lambda x: x["date"])
             first_action = min(bill_data["actions"], key=lambda x: x["date"])
 
+            legislative_session = remove_non_numeric_chars(bill_data["legislative_session"])
+
             bill = Bill(
-                id=create_bill_id(bill_data["identifier"], jurisdiction_area_id),
+                id=create_bill_id(bill_data["identifier"], legislative_session, jurisdiction_area_id),
                 title=bill_data["title"],
                 canonical_id=bill_data["identifier"],
                 jurisdiction_area_id=jurisdiction_area_id,
@@ -149,7 +157,8 @@ def main():
 
             upsert_dynamic(session, bill)
 
-            bill_ids.append(bill_data["identifier"])
+
+            bill_vote_mapping[legislative_session].add(bill_data["identifier"])
 
     # Need to find the person ids for each vote which unfortunately is by name
     # Keeping just the name info to reduce memory pressure here but we'll need to
@@ -175,7 +184,8 @@ def main():
             vote_event_data = json.load(vote_event_file)
 
             vote_bill_data = json.loads(vote_event_data["bill"][1:])
-            if vote_bill_data["identifier"] in bill_ids:
+            legislative_session = remove_non_numeric_chars(vote_event_data["legislative_session"])
+            if legislative_session in bill_vote_mapping and vote_bill_data["identifier"] in bill_vote_mapping[legislative_session]:
                 vote_event_data['votes'] = replace_voter_ids(
                     vote_event_data['votes'],
                     people_data,
@@ -183,7 +193,7 @@ def main():
                 )
                 vote_event = VoteEvent(
                     id=create_vote_event_id(vote_event_data["identifier"]),
-                    bill_id=create_bill_id(vote_bill_data["identifier"], jurisdiction_area_id),
+                    bill_id=create_bill_id(vote_bill_data["identifier"], legislative_session, jurisdiction_area_id),
                     identifier=vote_event_data["identifier"],
                     motion_text=vote_event_data["motion_text"],
                     motion_classification=vote_event_data["motion_classification"],
@@ -201,7 +211,7 @@ def main():
                 upsert_dynamic(session, vote_event)
                 log.info(f"Upserted vote: {vote_event_filepath} for bill {vote_bill_data['identifier']}")
             else:
-                log.warning(f"No bill found for vote event {vote_event_filepath} - Bill ID: {vote_bill_data['identifier']}")
+                log.warning(f"No bill found for vote event {vote_event_filepath} - Bill ID: {vote_bill_data['identifier']} - Legislative session: {legislative_session}")
 
 
 if __name__ == "__main__":

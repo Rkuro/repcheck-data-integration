@@ -28,7 +28,7 @@ def get_state_from_area_id(area_id: str) -> str|None:
       'ocd-division/country:us/state:wi' -> 'WI'
     Returns None if not found.
     """
-    match = re.search(r'state:([a-z]{2})(?:\b|/)', area_id)
+    match = re.search(r'(state|district):([a-z]{2})(?:\b|/)', area_id)
     if match:
         return match.group(1).upper()
     log.warning(f"Unable to find state from area id: {area_id}")
