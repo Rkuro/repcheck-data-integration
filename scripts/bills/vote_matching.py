@@ -30,7 +30,7 @@ def get_state_from_area_id(area_id: str) -> str|None:
     """
     match = re.search(r'(state|district):([a-z]{2})(?:\b|/)', area_id)
     if match:
-        return match.group(1).upper()
+        return match.group(2).upper()
     log.warning(f"Unable to find state from area id: {area_id}")
     return None
 
@@ -263,7 +263,7 @@ def replace_voter_ids(votes: list, persons: list, vote_chamber: str, threshold: 
         if matched_id:
             vote['voter_id'] = matched_id
         else:
-            log.warning(f"No Person object found for voter {voter_name}")
+            log.warning(f"No Person row found for voter {voter_name}")
 
         updated_votes.append(vote)
 
