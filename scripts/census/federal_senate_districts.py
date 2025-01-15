@@ -93,21 +93,21 @@ def main():
     log.info("Downloading federal senate districts")
 
     # Setup
-    session = get_session()
-    os.makedirs(DATA_DIR, exist_ok=True)
+    with get_session() as session:
+        os.makedirs(DATA_DIR, exist_ok=True)
 
-    total_ids = []
-    # There is only a single state zip file
-    for area in download_state_data():
-        upsert_dynamic(session, area)
-        total_ids.append(area.id)
-        log.info(f"Completed area {area.name}")
+        total_ids = []
+        # There is only a single state zip file
+        for area in download_state_data():
+            upsert_dynamic(session, area)
+            total_ids.append(area.id)
+            log.info(f"Completed area {area.name}")
 
-    log.info(f"Areas downloaded {len(total_ids)}")
+        log.info(f"Areas downloaded {len(total_ids)}")
 
-    cleanup()
+        cleanup()
 
-    log.info("Finished")
+        log.info("Finished")
 
 if __name__ == "__main__":
     setup_logging()

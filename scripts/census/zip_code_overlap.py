@@ -57,9 +57,8 @@ def main():
     log.info("Connecting zip codes")
 
     # Setup
-    session = get_session()
-
-    connect_zip_codes(session)
+    with get_session() as session:
+        connect_zip_codes(session)
 
 if __name__ == "__main__":
     setup_logging()

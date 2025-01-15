@@ -1,3 +1,5 @@
+from contextlib import contextmanager
+
 from sqlmodel import create_engine, Session, SQLModel, inspect
 from sqlalchemy.dialects.postgresql import insert
 import logging
@@ -37,10 +39,14 @@ def get_engine():
     return engine
 
 
+@contextmanager
 def get_session():
     engine = get_engine()
     session = Session(engine)
-    return session
+    try:
+        yield session
+    finally:
+        session.close()
 
 # Upsert any data into the DB - overwrites all fields if data exists already
 def upsert_dynamic(session, data):

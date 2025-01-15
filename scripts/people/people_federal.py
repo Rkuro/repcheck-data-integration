@@ -129,18 +129,18 @@ def cleanup(repo_dir):
 def main():
 
     # Setup
-    session = get_session()
-    os.makedirs(REPO_DIR, exist_ok=True)
+    with get_session() as session:
+        os.makedirs(REPO_DIR, exist_ok=True)
 
-    # Make sure we're pulling fresh data
-    cleanup(REPO_DIR)
+        # Make sure we're pulling fresh data
+        cleanup(REPO_DIR)
 
-    # Data lives in a GH repository
-    clone_repository(REPO_URL, REPO_DIR)
+        # Data lives in a GH repository
+        clone_repository(REPO_URL, REPO_DIR)
 
-    for person in parse_people_data(REPO_DIR):
-        upsert_dynamic(session, person)
-    # cleanup(REPO_DIR)
+        for person in parse_people_data(REPO_DIR):
+            upsert_dynamic(session, person)
+        # cleanup(REPO_DIR)
 
 if __name__ == "__main__":
     setup_logging()

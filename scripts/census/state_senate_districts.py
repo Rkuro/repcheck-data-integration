@@ -112,31 +112,31 @@ def cleanup():
 def main():
 
     # Setup
-    session = get_session()
-    os.makedirs(DATA_DIR, exist_ok=True)
+    with get_session() as session:
+        os.makedirs(DATA_DIR, exist_ok=True)
 
-    # There are 72 state district zip files that are numbered by their state FIPS code
-    # however the census skips some e.g. virgin islands or the canal zone because they
-    # don't have state senates :yikes:
-    numbers = [str(i).zfill(2) for i in range(1, 72)]
+        # There are 72 state district zip files that are numbered by their state FIPS code
+        # however the census skips some e.g. virgin islands or the canal zone because they
+        # don't have state senates :yikes:
+        numbers = [str(i).zfill(2) for i in range(1, 72)]
 
-    total_ids = []
+        total_ids = []
 
-    for zip_file_number in numbers:
-        log.info(f"Downloading file {zip_file_number}")
-        for area in download_state_district_data(zip_file_number):
-            upsert_dynamic(session, area)
-            total_ids.append(area.id)
-            log.info(f"Completed area {area.name}")
+        for zip_file_number in numbers:
+            log.info(f"Downloading file {zip_file_number}")
+            for area in download_state_district_data(zip_file_number):
+                upsert_dynamic(session, area)
+                total_ids.append(area.id)
+                log.info(f"Completed area {area.name}")
 
-    counts = Counter(total_ids)
-    duplicates = [item for item, count in counts.items() if count > 1]
+        counts = Counter(total_ids)
+        duplicates = [item for item, count in counts.items() if count > 1]
 
-    log.info(f"Areas downloaded {len(total_ids)}. duplicate ids: {duplicates}")
+        log.info(f"Areas downloaded {len(total_ids)}. duplicate ids: {duplicates}")
 
-    cleanup()
+        cleanup()
 
-    log.info("Finished")
+        log.info("Finished")
 
 if __name__ == "__main__":
     setup_logging()

@@ -118,26 +118,26 @@ def main():
     log.info("Downloading federal house districts")
 
     # Setup
-    session = get_session()
-    os.makedirs(DATA_DIR, exist_ok=True)
+    with get_session() as session:
+        os.makedirs(DATA_DIR, exist_ok=True)
 
-    # there are 78 congressional district zip files that are numbered by their state FIPS code
-    # however the census skips some e.g. virgin islands or the canal zone because they don't have true congressional representatives :yikes:
-    numbers = [str(i).zfill(2) for i in range(1, 78)]
+        # there are 78 congressional district zip files that are numbered by their state FIPS code
+        # however the census skips some e.g. virgin islands or the canal zone because they don't have true congressional representatives :yikes:
+        numbers = [str(i).zfill(2) for i in range(1, 78)]
 
-    total_ids = []
+        total_ids = []
 
-    for zip_file_number in numbers:
-        for area in download_congressional_district_data(zip_file_number):
-            upsert_dynamic(session, area)
-            total_ids.append(area)
-            log.info(f"Completed jurisdiction: {area.name}")
+        for zip_file_number in numbers:
+            for area in download_congressional_district_data(zip_file_number):
+                upsert_dynamic(session, area)
+                total_ids.append(area)
+                log.info(f"Completed jurisdiction: {area.name}")
 
-    log.info(f"Areas downloaded {len(total_ids)}")
+        log.info(f"Areas downloaded {len(total_ids)}")
 
-    cleanup()
+        cleanup()
 
-    log.info("Finished")
+        log.info("Finished")
 
 if __name__ == "__main__":
     setup_logging()

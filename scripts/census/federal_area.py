@@ -77,12 +77,12 @@ def download_national_data():
 
 def main():
     # Setup
-    session = get_session()
-    os.makedirs(DATA_DIR, exist_ok=True)
+    with get_session() as session:
+        os.makedirs(DATA_DIR, exist_ok=True)
 
-    national_area = download_national_data()
+        national_area = download_national_data()
 
-    upsert_dynamic(session, national_area)
+        upsert_dynamic(session, national_area)
 
 if __name__ == "__main__":
     setup_logging()

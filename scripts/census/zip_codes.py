@@ -88,15 +88,15 @@ def main():
     log.info("Ingesting zip codes")
 
     # Setup
-    session = get_session()
-    os.makedirs(DATA_DIR, exist_ok=True)
+    with get_session() as session:
+        os.makedirs(DATA_DIR, exist_ok=True)
 
-    for area in download_zip_codes():
-        upsert_dynamic(session, area)
+        for area in download_zip_codes():
+            upsert_dynamic(session, area)
 
-    # cleanup()
+        # cleanup()
 
-    # connect_zip_codes(session)
+        # connect_zip_codes(session)
 
 if __name__ == "__main__":
     setup_logging()
