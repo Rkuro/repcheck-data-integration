@@ -114,12 +114,12 @@ def parse_people_data(repo_dir):
                 first_name=person_data["given_name"],
                 last_name=person_data["family_name"],
                 other_names=[o["name"] for o in person_data["other_names"]] if "other_names" in person_data else None,
-                image=person_data["image"],
+                image=person_data["image"] if "image" in person_data else None,
                 email=person_data["email"] if "email" in person_data else None,
                 offices=person_data["offices"] if "offices" in person_data else None,
                 links=person_data["links"] if "links" in person_data else None,
                 ids=person_data["ids"] if "ids" in person_data else None,
-                sources=person_data["sources"],
+                sources=person_data["sources"] if "sources" in person_data else None,
             )
 
 
@@ -140,7 +140,6 @@ def main():
 
         for person in parse_people_data(REPO_DIR):
             upsert_dynamic(session, person)
-        # cleanup(REPO_DIR)
 
 if __name__ == "__main__":
     setup_logging()
