@@ -161,7 +161,7 @@ def parse_people_data(repo_dir):
                     offices=person_data["offices"] if "offices" in person_data else None,
                     links=person_data["links"] if "links" in person_data else None,
                     ids=person_data["ids"] if "ids" in person_data else None,
-                    sources=person_data["sources"],
+                    sources=person_data["sources"] if "sources" in person_data else None,
                 )
 
 
