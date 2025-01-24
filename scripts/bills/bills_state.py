@@ -171,8 +171,7 @@ def main():
                         identifier=vote_event_data["identifier"],
                         motion_text=vote_event_data["motion_text"],
                         motion_classification=vote_event_data["motion_classification"],
-                        # 2024-05-23T18:02:00+00:00
-                        start_date=datetime.strptime(vote_event_data["start_date"], "%Y-%m-%dT%H:%M:%S%z"),
+                        start_date=parse_date_str(vote_event_data["start_date"]),
                         result=vote_event_data["result"],
                         chamber=json.loads(vote_event_data["organization"][1:])["classification"],
                         legislative_session=vote_event_data["legislative_session"],
