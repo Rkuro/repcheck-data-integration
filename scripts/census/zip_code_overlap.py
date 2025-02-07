@@ -17,8 +17,6 @@ def connect_zip_codes(session):
             Person.id,
             Person.name,
             Person.constituent_area_id
-        ).where(
-            Person.jurisdiction_area_id=='ocd-division/country:us/district:dc'
         )
     ).all()
 

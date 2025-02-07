@@ -1,7 +1,8 @@
 from sqlmodel import SQLModel, Field, Relationship
 from geoalchemy2 import Geometry
 from datetime import datetime, timezone
-from sqlalchemy import Column, ARRAY, Text, JSON, BigInteger, DOUBLE_PRECISION, DateTime, text
+from sqlalchemy import Column, ARRAY, Text, BigInteger, DOUBLE_PRECISION, DateTime, text
+from sqlalchemy.dialects.postgresql import JSONB
 from typing import List, Optional, Dict
 
 class PersonArea(SQLModel, table=True):
@@ -37,6 +38,21 @@ class Area(SQLModel, table=True):
     class Config:
         arbitrary_types_allowed = True
 
+class PrecinctElectionResultArea(SQLModel, table=True):
+    __tablename__ = "precinct_election_result_area"
+    precinct_id: str = Field(primary_key=True, nullable=False)
+    state: str
+    votes_dem: int = Field(sa_column=Column(BigInteger()))
+    votes_rep: int = Field(sa_column=Column(BigInteger()))
+    votes_total: int = Field(sa_column=Column(BigInteger()))
+    pct_dem_lead: float = Field(sa_column=Column(DOUBLE_PRECISION()))
+    official_boundary: Optional[bool]
+    geometry: Geometry = Field(sa_column=Column(Geometry("GEOMETRY", srid=4326), nullable=False))
+    centroid_lat: float = Field(sa_column=Column(DOUBLE_PRECISION()))
+    centroid_lon: float = Field(sa_column=Column(DOUBLE_PRECISION()))
+
+    class Config:
+        arbitrary_types_allowed = True
 
 class Person(SQLModel, table=True):
     __tablename__ = 'people'
@@ -51,10 +67,10 @@ class Person(SQLModel, table=True):
     other_names: Optional[List[str]] = Field(default=None, sa_column=Column(ARRAY(Text)))
     image: Optional[str] = None
     email: Optional[str] = None
-    offices:Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON))
-    links: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON))
-    ids: Optional[Dict] = Field(default=None, sa_column=Column(JSON))
-    sources: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSON))
+    offices:Optional[List[Dict]] = Field(default=None, sa_column=Column(JSONB))
+    links: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSONB))
+    ids: Optional[Dict] = Field(default=None, sa_column=Column(JSONB))
+    sources: Optional[List[Dict]] = Field(default=None, sa_column=Column(JSONB))
 
 
 class Bill(SQLModel, table=True):
@@ -65,20 +81,20 @@ class Bill(SQLModel, table=True):
     canonical_id: str
     jurisdiction_area_id: str = Field(foreign_key="areas.id", nullable=False)
     legislative_session: str
-    from_organization:Dict = Field(default=None, sa_column=Column(JSON))
-    classification: List[str] = Field(default=None, sa_column=Column(JSON))
-    subject: List[Dict] = Field(default=None, sa_column=Column(JSON))
-    abstracts: List[Dict] = Field(default=None, sa_column=Column(JSON))
-    other_titles: List[Dict] = Field(default=None, sa_column=Column(JSON))
-    other_identifiers: List[str] = Field(default=None, sa_column=Column(JSON))
-    actions: List[Dict] = Field(default=None, sa_column=Column(JSON))
-    sponsorships: List[Dict] = Field(default=None, sa_column=Column(JSON))
-    related_bills: List[Dict] = Field(default=None, sa_column=Column(JSON))
-    versions: List[Dict] = Field(default=None, sa_column=Column(JSON))
-    documents: List[Dict] = Field(default=None, sa_column=Column(JSON))
-    citations: List[Dict] = Field(default=None, sa_column=Column(JSON))
-    sources: List[Dict] = Field(default=None, sa_column=Column(JSON))
-    extras: Dict = Field(default=None, sa_column=Column(JSON))
+    from_organization:Dict = Field(default=None, sa_column=Column(JSONB))
+    classification: List[str] = Field(default=None, sa_column=Column(JSONB))
+    subject: List[Dict] = Field(default=None, sa_column=Column(JSONB))
+    abstracts: List[Dict] = Field(default=None, sa_column=Column(JSONB))
+    other_titles: List[Dict] = Field(default=None, sa_column=Column(JSONB))
+    other_identifiers: List[str] = Field(default=None, sa_column=Column(JSONB))
+    actions: List[Dict] = Field(default=None, sa_column=Column(JSONB))
+    sponsorships: List[Dict] = Field(default=None, sa_column=Column(JSONB))
+    related_bills: List[Dict] = Field(default=None, sa_column=Column(JSONB))
+    versions: List[Dict] = Field(default=None, sa_column=Column(JSONB))
+    documents: List[Dict] = Field(default=None, sa_column=Column(JSONB))
+    citations: List[Dict] = Field(default=None, sa_column=Column(JSONB))
+    sources: List[Dict] = Field(default=None, sa_column=Column(JSONB))
+    extras: Dict = Field(default=None, sa_column=Column(JSONB))
 
     # Derived fields
     latest_action_date: Optional[datetime] = Field(default=None, sa_column=Column(DateTime))
@@ -95,13 +111,13 @@ class VoteEvent(SQLModel, table=True):
     bill_id: str = Field(foreign_key="bills.id", nullable=False)
     identifier: str
     motion_text: str
-    motion_classification: List[str] = Field(default=None, sa_column=Column(JSON))
+    motion_classification: List[str] = Field(default=None, sa_column=Column(JSONB))
     start_date: datetime
     result: str
     chamber: str
     legislative_session: str
-    votes: List[Dict] = Field(default=None, sa_column=Column(JSON))
-    counts: List[Dict] = Field(default=None, sa_column=Column(JSON))
-    sources: List[Dict] = Field(default=None, sa_column=Column(JSON))
-    extras: Dict = Field(default=None, sa_column=Column(JSON))
+    votes: List[Dict] = Field(default=None, sa_column=Column(JSONB))
+    counts: List[Dict] = Field(default=None, sa_column=Column(JSONB))
+    sources: List[Dict] = Field(default=None, sa_column=Column(JSONB))
+    extras: Dict = Field(default=None, sa_column=Column(JSONB))
 
