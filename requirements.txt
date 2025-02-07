@@ -23,7 +23,6 @@ openai==1.59.5
 packaging==24.1
 pandas==2.2.3
 pdfminer.six==20240706
-pdftotext==3.0.0
 pillow==11.1.0
 psycopg2-binary==2.9.9
 pycparser==2.22
