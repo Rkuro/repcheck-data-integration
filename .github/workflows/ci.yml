@@ -134,20 +134,44 @@ jobs:
                   print(f"ok        {name}")
 
           print("\n" + "=" * 64)
-          print(f"imported cleanly    : {len(imported)}")
+          print(f"modules discovered  : {len(modules)}")
+          print(f"imported cleanly    : {len(imported)} of {len(modules)} discovered")
           print(f"tolerated (env)     : {len(tolerated)}")
           print(f"ImportError (gating): {len(failed)}")
           print("=" * 64)
 
           if tolerated:
+              # Tolerated is NOT gating - there is no database, no network and
+              # no credentials on the runner, and making it gating would make
+              # this check flaky. But a tolerated module is a module whose
+              # import block stopped early, so it is coverage this check
+              # silently lost: a module-scope AttributeError in scripts/utils.py
+              # took coverage from 29/29 to 25/29 with no visible signal at all.
+              # The baseline is 0; anything above that is a real reduction in
+              # what this check verifies, so it gets a ::warning annotation that
+              # shows up on the job and in the PR, not just a line in the log.
+              print(
+                  "::warning title=Import coverage reduced::"
+                  f"{len(tolerated)} of {len(modules)} module(s) under scripts/"
+                  " did not finish importing (non-ImportError at import time),"
+                  f" so only {len(imported)} of {len(modules)} were fully"
+                  " verified. Baseline is 0. Modules: "
+                  + ", ".join(tolerated)
+                  + ". Confirm each is genuinely environmental (no database, no"
+                  " network, no credentials on the runner) and not a defect."
+              )
               print(
                   "\nNOTE: the modules above raised a non-ImportError at import"
                   " time, so their import-time side effects did not complete."
-                  " Their top-level imports still executed (in this repo every"
-                  " top-level import precedes any executable top-level"
-                  " statement), so dependency coverage is intact. This count is"
-                  " 0 as of the commit that added this workflow; if it grows,"
-                  " confirm the new failure is genuinely environmental."
+                  " Their top-level imports still executed IF every top-level"
+                  " import precedes any executable top-level statement in that"
+                  " module - which held for all 29 modules when this workflow"
+                  " was written, but is an invariant, not a guarantee. Where it"
+                  " does not hold, imports after the failing statement were"
+                  " never reached and this check did not cover them. That is"
+                  " why the count above is annotated rather than merely"
+                  " printed: the baseline is 0, and a rise means this check is"
+                  " verifying less than it used to."
               )
 
           if failed:
@@ -168,7 +192,7 @@ jobs:
   # runs in parallel and its failure is attributable on its own.
   # ---------------------------------------------------------------------------
   dependency-audit:
-    name: Dependency audit (pip-audit)
+    name: Dependency audit (fails on known advisories)
     runs-on: ubuntu-latest
     steps:
       - name: Check out repository
@@ -184,26 +208,32 @@ jobs:
       - name: Install pip-audit
         run: pip install pip-audit==2.10.1
 
-      # ADVISORY, DELIBERATELY -- this is staged, not an oversight.
+      # GATING. A known advisory against a pinned dependency fails this job and
+      # blocks the merge.
       #
-      # The intent is for this to gate. It does not gate today because it does
-      # not pass today: against requirements.txt as it exists on `main`,
+      # MERGE ORDER MATTERS -- READ THIS BEFORE MERGING THIS PR.
+      #
+      # This gate assumes PR #1 (branch `security/dep-patches`) has already
+      # landed. Against requirements.txt as it exists on `main` today,
       # pip-audit reports 60 known advisories across 12 packages (cryptography,
       # fonttools, geopandas, GitPython, h11, idna, pdfminer.six, pillow,
-      # python-dotenv, requests, soupsieve, urllib3) and exits 1. Shipping it
-      # gating would mean shipping a check that is red on its first run.
+      # python-dotenv, requests, soupsieve, urllib3) and exits 1; against
+      # `security/dep-patches` -- which removes 12 orphaned pins and bumps 9
+      # vulnerable ones -- it reports none and exits 0 (both verified locally
+      # with pip-audit 2.10.1 on 2026-08-03). So: merge `security/dep-patches`
+      # first, then this. Merged in the other order, this job is red on `main`
+      # until the patch branch lands.
       #
-      # To make it gate: delete the `continue-on-error: true` line below. Do
-      # that once requirements.txt is at zero advisories -- the branch
-      # `security/dep-patches` does exactly that (it removes 12 orphaned pins
-      # and bumps 9 vulnerable ones, taking pip-audit from 60 findings to 0).
-      # After that merges, this step passes and the line can go.
+      # The alternative -- shipping this step with `continue-on-error: true`
+      # and deleting the line later -- was rejected: nothing enforces that
+      # deletion, so the repo's only advisory gate would quietly stay advisory
+      # forever. Merge order is a one-time cost; an unenforced follow-up is
+      # permanent.
       #
-      # Maintenance note for whoever flips it: once gating, this job goes red
+      # Maintenance cost, accepted deliberately: once gating, this job goes red
       # when a NEW advisory is published against a pin, with no change to this
-      # repository. That is the intended behaviour -- it is how you find out --
-      # but it means a published CVE blocks unrelated pull requests until
-      # someone bumps the pin. Budget for that before removing the line.
+      # repository. That is legitimate and intended -- it is how you find out --
+      # but it means a published CVE turns `main` red and blocks unrelated pull
+      # requests until someone bumps the pin. Budget for that.
       - name: Audit pinned dependencies for known advisories
-        continue-on-error: true
         run: pip-audit -r requirements.txt
