@@ -1,0 +1,239 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Python 3.11 is what the project targets. Source: .idea/misc.xml and
+  # .idea/repcheck-data-integration.iml both name the interpreter
+  # "Python 3.11 (repcheck-data-integration)". There is no setup.py,
+  # pyproject.toml, .python-version or tox.ini in the repo, so the IDE config
+  # is the only recorded statement of the target version.
+  PYTHON_VERSION: "3.11"
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # There are no tests in this repository, and the scripts cannot run here:
+  # every one of them needs a local Postgres/PostGIS instance and live network
+  # access to Census and NYT endpoints. This job does not try to prove the
+  # pipeline works. It proves the dependency set is intact, which is the thing
+  # that has actually broken.
+  # ---------------------------------------------------------------------------
+  static-checks:
+    name: Compile and import checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Install pinned dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      # Runs first so that a broken environment is attributed to the
+      # environment, rather than showing up as a confusing failure in one of
+      # the checks below. requirements.txt is a `pip freeze`, so a hand-edit
+      # that leaves an unsatisfiable pin is a realistic failure mode.
+      - name: Check dependency resolution consistency (pip check)
+        run: pip check
+
+      - name: Byte-compile all scripts
+        run: python -m compileall scripts
+
+      # The highest-value check in this repo. requirements.txt is a pip freeze
+      # that accumulated orphaned pins; twelve were recently removed. A pin
+      # removed in error is invisible to compileall and would otherwise stay
+      # hidden until a real ingest run months later. Importing every module
+      # surfaces it immediately.
+      #
+      # The script fails ONLY on ImportError (a missing distribution, or a name
+      # that a pinned version no longer provides). Any other exception is
+      # reported and tolerated, because there is no database, no network and no
+      # credentials on the runner.
+      #
+      # The two variables below exist to keep the check from being vacuous, not
+      # to make anything connect. scripts/database/database.py calls
+      # quote(POSTGRES_DB_PASSWORD) at module scope and
+      # scripts/ai/summarize_bills_federal.py constructs OpenAI() at module
+      # scope; with both unset, 14 of the 29 modules abort partway through their
+      # import block on TypeError/OpenAIError. Supplying obvious dummies lets
+      # all 29 modules execute every top-level import. The values are never used
+      # to reach anything: no engine is created and no request is made at import
+      # time. There is no .env on the runner (it is gitignored), so load_dotenv
+      # is a no-op and cannot override these.
+      - name: Import every module under scripts/
+        env:
+          POSTGRES_DB_PASSWORD: ci-not-a-real-password
+          OPENAI_API_KEY: sk-ci-not-a-real-key
+        run: |
+          python - <<'PY'
+          """Import every module under scripts/ and fail ONLY on ImportError."""
+          import importlib
+          import pathlib
+          import sys
+          import traceback
+
+          sys.path.insert(0, str(pathlib.Path.cwd()))
+
+          ROOT = pathlib.Path("scripts")
+
+          modules = []
+          for path in sorted(ROOT.rglob("*.py")):
+              if "__pycache__" in path.parts:
+                  continue
+              parts = list(path.with_suffix("").parts)
+              if parts[-1] == "__init__":
+                  parts = parts[:-1]
+              if parts:
+                  modules.append(".".join(parts))
+
+          print(f"Discovered {len(modules)} module(s) under {ROOT}/\n")
+
+          imported, tolerated, failed = [], [], []
+
+          for name in modules:
+              try:
+                  importlib.import_module(name)
+              except ImportError as exc:
+                  # A missing distribution, or a name an installed distribution
+                  # no longer provides. Both are dependency defects -> gating.
+                  failed.append(name)
+                  print(f"FAIL      {name}")
+                  print(f"          {type(exc).__name__}: {exc}")
+                  if getattr(exc, "name", None):
+                      print(f"          unresolved module: {exc.name!r}")
+                  for line in traceback.format_exc().splitlines():
+                      print(f"          | {line}")
+              except BaseException as exc:
+                  # Not an ImportError, so every top-level import in this module
+                  # already resolved; it died on the environment (no database,
+                  # no network, no credentials), not on packaging. Reported, not
+                  # gating.
+                  tolerated.append(name)
+                  print(f"TOLERATED {name}")
+                  print(f"          {type(exc).__name__}: {exc}")
+              else:
+                  imported.append(name)
+                  print(f"ok        {name}")
+
+          print("\n" + "=" * 64)
+          print(f"modules discovered  : {len(modules)}")
+          print(f"imported cleanly    : {len(imported)} of {len(modules)} discovered")
+          print(f"tolerated (env)     : {len(tolerated)}")
+          print(f"ImportError (gating): {len(failed)}")
+          print("=" * 64)
+
+          if tolerated:
+              # Tolerated is NOT gating - there is no database, no network and
+              # no credentials on the runner, and making it gating would make
+              # this check flaky. But a tolerated module is a module whose
+              # import block stopped early, so it is coverage this check
+              # silently lost: a module-scope AttributeError in scripts/utils.py
+              # took coverage from 29/29 to 25/29 with no visible signal at all.
+              # The baseline is 0; anything above that is a real reduction in
+              # what this check verifies, so it gets a ::warning annotation that
+              # shows up on the job and in the PR, not just a line in the log.
+              print(
+                  "::warning title=Import coverage reduced::"
+                  f"{len(tolerated)} of {len(modules)} module(s) under scripts/"
+                  " did not finish importing (non-ImportError at import time),"
+                  f" so only {len(imported)} of {len(modules)} were fully"
+                  " verified. Baseline is 0. Modules: "
+                  + ", ".join(tolerated)
+                  + ". Confirm each is genuinely environmental (no database, no"
+                  " network, no credentials on the runner) and not a defect."
+              )
+              print(
+                  "\nNOTE: the modules above raised a non-ImportError at import"
+                  " time, so their import-time side effects did not complete."
+                  " Their top-level imports still executed IF every top-level"
+                  " import precedes any executable top-level statement in that"
+                  " module - which held for all 29 modules when this workflow"
+                  " was written, but is an invariant, not a guarantee. Where it"
+                  " does not hold, imports after the failing statement were"
+                  " never reached and this check did not cover them. That is"
+                  " why the count above is annotated rather than merely"
+                  " printed: the baseline is 0, and a rise means this check is"
+                  " verifying less than it used to."
+              )
+
+          if failed:
+              print(
+                  f"\n{len(failed)} module(s) raised ImportError: "
+                  + ", ".join(failed)
+                  + "\nA dependency the scripts import is missing from"
+                  " requirements.txt, or is pinned to a version that no longer"
+                  " provides the imported name."
+              )
+              sys.exit(1)
+
+          print("\nNo ImportError: every dependency the scripts import is installed.")
+          PY
+
+  # ---------------------------------------------------------------------------
+  # Separate job: it needs pip-audit but not the project's dependencies, so it
+  # runs in parallel and its failure is attributable on its own.
+  # ---------------------------------------------------------------------------
+  dependency-audit:
+    name: Dependency audit (fails on known advisories)
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # Pinned for the same reason the runtime is pinned: an unrelated pip-audit
+      # release should not turn this check red on its own.
+      - name: Install pip-audit
+        run: pip install pip-audit==2.10.1
+
+      # GATING. A known advisory against a pinned dependency fails this job and
+      # blocks the merge.
+      #
+      # MERGE ORDER MATTERS -- READ THIS BEFORE MERGING THIS PR.
+      #
+      # This gate assumes PR #1 (branch `security/dep-patches`) has already
+      # landed. Against requirements.txt as it exists on `main` today,
+      # pip-audit reports 60 known advisories across 12 packages (cryptography,
+      # fonttools, geopandas, GitPython, h11, idna, pdfminer.six, pillow,
+      # python-dotenv, requests, soupsieve, urllib3) and exits 1; against
+      # `security/dep-patches` -- which removes 12 orphaned pins and bumps 9
+      # vulnerable ones -- it reports none and exits 0 (both verified locally
+      # with pip-audit 2.10.1 on 2026-08-03). So: merge `security/dep-patches`
+      # first, then this. Merged in the other order, this job is red on `main`
+      # until the patch branch lands.
+      #
+      # The alternative -- shipping this step with `continue-on-error: true`
+      # and deleting the line later -- was rejected: nothing enforces that
+      # deletion, so the repo's only advisory gate would quietly stay advisory
+      # forever. Merge order is a one-time cost; an unenforced follow-up is
+      # permanent.
+      #
+      # Maintenance cost, accepted deliberately: once gating, this job goes red
+      # when a NEW advisory is published against a pin, with no change to this
+      # repository. That is legitimate and intended -- it is how you find out --
+      # but it means a published CVE turns `main` red and blocks unrelated pull
+      # requests until someone bumps the pin. Budget for that.
+      - name: Audit pinned dependencies for known advisories
+        run: pip-audit -r requirements.txt
